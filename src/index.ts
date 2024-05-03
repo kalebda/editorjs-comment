@@ -1,5 +1,4 @@
-
-import { API,  ToolConfig } from "@editorjs/editorjs/types"; // to support typescript, you have install this while developing 
+import { API, ToolConfig } from "@editorjs/editorjs/types"; // to support typescript, you have install this while developing
 
 enum CommentId {
   CommentBlockId = "commentBlockId",
@@ -29,11 +28,12 @@ export interface RenderBody {
    */
   commentBlockId: string | null;
   /**
-   *  a EditorJS BlockId 
+   *  a EditorJS BlockId
    *
    * @type {string|null}
    */
   blockId: string | null;
+  state: boolean;
   onClose: () => void;
   addCommentBlockData: (data: CommentBlockData) => void;
   removeBlockComments: () => void;
@@ -48,8 +48,9 @@ export interface CommentConfig {
     blockId,
     addCommentBlockData,
     onClose,
+    state,
     removeBlockComments,
-  }: RenderBody) => HTMLElement | any //JSX.Element;
+  }: RenderBody) => HTMLElement | any; //JSX.Element;
 }
 
 /**
@@ -87,6 +88,7 @@ export interface CommentConfig {
   * ```
  */
 export default class Comment {
+  state: boolean = false;
   /**
    *  a unique id used to identify section of of comments
    *
@@ -133,7 +135,7 @@ export default class Comment {
     return block.id;
   }
 
-  editorJsId: string = "editorjs";
+  editorJsId: string = '[id^="editor-"]';
 
   iconClasses: {
     base: string;
@@ -167,9 +169,11 @@ export default class Comment {
   public renderBody: ({
     commentBlockId,
     blockId,
+    state,
     onClose,
     addCommentBlockData,
-  }: RenderBody) => HTMLElement | null | any //JSX.Element;  // any should have been JSX.Element
+    removeBlockComments,
+  }: RenderBody) => HTMLElement | null | any; //JSX.Element;  // any should have been JSX.Element
 
   /**
    * Class name for term-tag
@@ -206,6 +210,8 @@ export default class Comment {
       this.renderBody = config.renderBody;
     }
 
+    this.state = false;
+
     this.activeOnClick();
     /**
      * CSS classes
@@ -233,7 +239,7 @@ export default class Comment {
   render() {
     this.button = document.createElement("button");
     this.button.classList.add(this.iconClasses.base);
-    this.button.innerHTML = `<?xml version="1.0" ?><svg height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.103 0-2 .897-2 2v18l4-4h14c1.103 0 2-.897 2-2V4c0-1.103-.897-2-2-2zm-3 9h-4v4h-2v-4H7V9h4V5h2v4h4v2z"/></svg>`;
+    this.button.innerHTML = `<?xml version="1.0" ?><svg height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.103 0-2 .897-2 2v18l4-4h14c1.103 0 2-.897 2-2V4c0-1.103-.897-2-2-2zm-3 9h-4v4h-2v-4H7V9h4V5h2v4h4v2z"/></svg>`;
 
     const Container = document.createElement("div");
 
@@ -280,7 +286,6 @@ export default class Comment {
     /**
      * If start or end of selection is in the highlighted block
      */
-
     if (termWrapper) {
       this.unwrap(termWrapper);
     } else {
@@ -366,19 +371,24 @@ export default class Comment {
 
   addCommentBlockData(data: CommentBlockData) {
     // this means all comments has been deleted  so remove the commentBlockId on the div
+    console.log("----------------DATA", data, this.commentBlockId);
     if (data.count < 1 && this.commentBlockId) {
       this.commentBlockId = null;
     }
     if (data.count > 0 && !this.commentBlockId) {
-      this.commentBlockId = data.id;
+      if (!this.state) {
+        this.commentBlockId = data.id;
 
-      //  this.setCommentBlockId();
-      this.customSurround();
+        //  this.setCommentBlockId();
+        this.customSurround();
+      }
     }
   }
 
   removeBlockComments() {
     //Todo: implement unrwapping method base on the commentblockId
+    let termWrapper = this.api.selection.findParentTag(this.tag, Comment.CSS);
+    if (termWrapper) this.unwrap(termWrapper);
     console.log("remove comments");
   }
 
@@ -388,44 +398,75 @@ export default class Comment {
       this.commentBlockId = null;
       return;
     }
-
+    this.state = true;
     this.commentBlockId = commentBlockId;
-
-    // }
   }
 
   activeOnClick() {
-    const holder = document.getElementById(this.editorJsId);
+    // Find all elements whose IDs start with 'editor-'
+    const holders = document.querySelectorAll(this.editorJsId);
 
-    const observer = new MutationObserver((mutationList) => {
-      mutationList.forEach((mutation, y) => {
-        const targetNode: HTMLElement = mutation.target as HTMLElement;
+    holders.forEach((holder) => {
+      const observer = new MutationObserver((mutationList) => {
+        mutationList.forEach((mutation, y) => {
+          const targetNode: HTMLElement = mutation.target as HTMLElement;
+          if (
+            mutation.type === "childList" &&
+            targetNode.classList.contains("codex-editor__redactor")
+          ) {
+            const spanTooltips = document.querySelectorAll(`.${Comment.CSS}`);
 
-        if (
-          mutation.type === "childList" &&
-          targetNode.classList.contains("codex-editor__redactor")
-        ) {
-          const spanTooltips = document.querySelectorAll(`.${Comment.CSS}`);
-
-          spanTooltips.forEach((marker) => {
-            const markerElement = marker as HTMLElement;
-            if (this.markerColor) {
-              markerElement.style.backgroundColor = this.markerColor;
-            }
-            markerElement.onclick = () => {
-              this.setCommentBlockId(markerElement);
-
-              this.renderCommentComponent();
-            };
-          });
-        }
+            spanTooltips.forEach((marker) => {
+              const markerElement = marker as HTMLElement;
+              if (this.markerColor) {
+                markerElement.style.backgroundColor = this.markerColor;
+              }
+              markerElement.onclick = () => {
+                this.setCommentBlockId(markerElement);
+                this.renderCommentComponent();
+              };
+            });
+          }
+        });
       });
-    });
 
-    if (holder) {
+      // Start observing mutations for this holder
       observer.observe(holder, { childList: true, subtree: true });
-    }
+    });
   }
+
+  // activeOnClick() {
+  // const holder = document.getElementById(this.editorJsId);
+
+  //   const observer = new MutationObserver((mutationList) => {
+  //     mutationList.forEach((mutation, y) => {
+  //       const targetNode: HTMLElement = mutation.target as HTMLElement;
+
+  //       if (
+  //         mutation.type === "childList" &&
+  //         targetNode.classList.contains("codex-editor__redactor")
+  //       ) {
+  //         const spanTooltips = document.querySelectorAll(`.${Comment.CSS}`);
+
+  //         spanTooltips.forEach((marker) => {
+  //           const markerElement = marker as HTMLElement;
+  //           if (this.markerColor) {
+  //             markerElement.style.backgroundColor = this.markerColor;
+  //           }
+  //           markerElement.onclick = () => {
+  //             this.setCommentBlockId(markerElement);
+
+  //             this.renderCommentComponent();
+  //           };
+  //         });
+  //       }
+  //     });
+  //   });
+
+  //   if (holder) {
+  //     observer.observe(holder, { childList: true, subtree: true });
+  //   }
+  // }
 
   hideCommentComponent() {
     const commentContainer = document.getElementById(CommentId.ContainerId);
@@ -457,6 +498,7 @@ export default class Comment {
     const response = this.renderBody({
       commentBlockId: this.commentBlockId,
       blockId,
+      state: this.state,
       onClose: () => this.onClose(),
       addCommentBlockData: (data: CommentBlockData) =>
         this.addCommentBlockData(data),
@@ -474,19 +516,21 @@ export default class Comment {
           commentBlockId: this.commentBlockId,
           onClose: () => this.onClose(),
           blockId,
+          state: this.state,
           addCommentBlockData: (data: CommentBlockData) =>
             this.addCommentBlockData(data),
           removeBlockComments: () => this.removeBlockComments(),
         }) as Node
       );
     } else {
+      // To avoid typescript error when using for project that uses html  instead of  react  we set to any
+      import("react-dom/client" as any)
+        .then(({ createRoot }) => {
+          const root = createRoot(commentComponent);
 
-        // To avoid typescript error when using for project that uses html  instead of  react  we set to any 
-      import("react-dom/client"  as any).then(({ createRoot }) => {
-        const root = createRoot(commentComponent);
-
-        root.render(response);
-      }).catch(err =>{})
+          root.render(response);
+        })
+        .catch((err) => {});
     }
     this.setActiveClass();
   }
@@ -528,14 +572,21 @@ export default class Comment {
   /**
    * Check and change Term's state for current selection
    */
-  checkState() {
+  checkState(selection: any) {
+    const text = selection.anchorNode;
+    if (!text) {
+      return;
+    }
+
+    const anchorElement = text instanceof Element ? text : text.parentElement;
     const termTag = this.api.selection.findParentTag(this.tag, Comment.CSS);
 
-    if (!this.button) {
+    if (!this.button || !text) {
       return;
     }
 
     this.button.classList.toggle(this.iconClasses.active, !!termTag);
+    this.state = !!anchorElement.closest("MARK");
   }
 
   /**
@@ -557,4 +608,4 @@ export default class Comment {
   }
 }
 
-export {Comment}
+export { Comment };
