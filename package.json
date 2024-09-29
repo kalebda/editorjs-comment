@@ -1,6 +1,6 @@
 {
   "name": "@kalebu2468/editorjs-comment",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "editorjs-comment plugin that allows you to add comment  to editorjs",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
